@@ -1,0 +1,239 @@
+---
+title: "Final Project"
+author: "Linh Bui"
+date: "`r Sys.Date()`"
+documentclass: article
+geometry: margin=1in
+fontsize: 11pt
+output:
+  pdf_document:
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    dev: pdf
+    highlight: tango
+  html_document:
+    theme: default
+    self_contained: true
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    smart: true
+    dev: svg
+---
+
+```{r setup, include = FALSE}
+# DO NOT ALTER THIS CHUNK
+# Set knitr options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE,
+  fig.width = 5,
+  fig.asp = 0.618,
+  out.width = "70%",
+  dpi = 120,
+  fig.align = "center",
+  cache = FALSE
+)
+# Load required packages
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(infer))
+suppressPackageStartupMessages(library(modelr))
+suppressPackageStartupMessages(library(broom))
+# Load dataset
+college <- read_rds("college.rds") %>%
+  type_convert(
+    na=combine("", "NA", "PrivacySuppressed")
+  )
+# Set seed
+set.seed(98261936)
+```
+
+## Introduction
+
+* My question is: "*Are mean earnings of graduates from schools in Cities significantly higher than mean earnings of students graduating from schools in Rural Areas?*"
+
+* Columns’ names: MN_EARN_WNE_P10, LOCALE
+
+* Response variable: MN_EARN_WNE_P10 (continuous), which is the Mean earnings of students working and not enrolled 10 years after entry
+
+* Explanatory variables: LOCALE (categorical) - Locale of institution
+
+* I am going to use a hypothesis test to answer my question.
+
+* I think this is an interesting question to ask because it is believed that the chance of getting more jobs and higher-paid jobs can be affected by the location of the school. In other words, people say that companies tend to prioritize students from local schools, which means that students from schools located in big cities (where there are more big companies) are more likely to get higher paid jobs, since the expenses in bigger cities tend to be higher than those in rural areas, resulting in higher earnings too. One of the reasons for this phenomenon is that there are about 5,000 institutions in the U.S., so except for highly prestigious institutions, most people are unable to know all of those schools, leading to the priority for local schools (which recruiters tend to know more) while scanning resumes and applications. Adding on to that, companies want to support the local community. Also, I would like to know if students tend to work in the same places where their schools are located after graduation. By answering this question, I think we can figure out the whether or not there is a relationship between a school’s location and its students’ earnings.
+
+
+## Preprocessing
+
+1. 
+
+```{r}
+college_reduced <- college %>%
+  select(LOCALE, MN_EARN_WNE_P10) %>%
+  filter(LOCALE %in% c("11", "12", "13", "41", "42", "43")) %>%
+  arrange(LOCALE)
+```
+
+* I selected only 2 columns that I am going to use for this project. I filtered the following variables to make the comparision between cities and rural areas: '11', '12', '13' represent cities, and '41', '42', '43' represent rural areas. Then, I arrange the LOCALE column in the ascending order. 
+
+2. 
+
+```{r}
+college_reduced <- college_reduced %>%
+  rename(mean_earnings = MN_EARN_WNE_P10)
+```
+
+* I renamed the second column to make it more human-readable. 
+
+3. 
+
+```{r}
+college_reduced <- college_reduced %>%
+  mutate(
+    recoded_LOCALE = recode(
+        LOCALE,
+        `11` = "large_city",
+        `12` = "midsize_city",
+        `13` = "small_city", 
+        `41` = "fringe_rural",
+        `42` = "distant_rural",
+        `43` = "remote_rural"
+    )
+  )
+```
+
+* I recoded the integer variables in the LOCALE column to analyze the dataset more easily. 
+
+
+## Visualization
+
+```{r}
+college_reduced %>%
+  ggplot() +
+  geom_bar(mapping = aes(x = recoded_LOCALE)) +
+  labs(title = "The variation of chosen locations", 
+       x = "Locale")
+```
+
+* I created this graph to see the variation of the categorial variable 'recoded_LOCALE'. This can be seen that the center of the distribution is at large_city. This distribution has no outliers. The counts of cities in this distribution are higher than those of rural areas, which means that there more datapoints about cities areas in this dataset. 
+
+```{r}
+college_reduced %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = mean_earnings, fill = recoded_LOCALE), alpha = 0.5) +
+  labs(title = "The distribution of mean earnings by locations")
+```
+
+* I create this graph to analyze the variation of mean earnings by locations. This distribution is right-skewed. Its center is at around 26,000- 27,000. It can be seen that earnings in rural areas make up a relatively small portion of this distribution, especially at the earning levels greater than 50,000.
+
+```{r, fig.width = 8, fig.asp = 1}
+college_reduced %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = mean_earnings)) + 
+  facet_wrap(~ recoded_LOCALE, scales = "free_x") +
+  labs(title = "The covariation between mean earnings and schools' locations")
+```
+
+* I create this graph and facet it over locale to find the covariation between mean earnings and schools' locations. It can been clearly seen that the distributions of the earnings in rural areas tend to be symmetric. Meanwhile, the distributions of those in cities tend to be right_skewed. There are more outliers in the distributions of fringe_rural, midsize_city, and large_city than the distributions of distant_rural, remote_rural, and small_city. In addition, graduates from institutions in cities' earnings are much higher than graduates from schools in rural areas' earnings, according to these distributions. 
+
+```{r}
+college_reduced %>%
+  ggplot() + 
+  geom_freqpoly(aes(x = mean_earnings, color = recoded_LOCALE)) +
+  labs(title = "The covariation between mean earnings and schools' locations")
+```
+
+* While the faceted histogram in the previous part was created to see the mean earnings in each locale more easily, this frequency polygon is created to analyze the covariation between mean_earnings and recoded_LOCALE at all investigated locations simultaneously on the same graph. The following same patterns can still be recognized here: right-skewed distributions of earnings in cities, symmetric distributions of mean earnings in rural areas, more outliers in distributions of fringe_rural, midsize_city, and large_city, and mean earnings of graduates from schools in cities are higher than those in rural areas. 
+
+## Summary Statistics
+
+```{r}
+college_reduced %>%
+  group_by(recoded_LOCALE) %>%
+  summarize(
+    count = n()
+    )
+```
+
+```{r}
+college_reduced %>%
+  group_by(recoded_LOCALE) %>%
+  summarize(
+    count = n(),
+    mean = mean(mean_earnings, na.rm = TRUE),
+    median = median(mean_earnings, na.rm = TRUE),
+    min = min(mean_earnings, na.rm = TRUE),
+    max = max(mean_earnings, na.rm = TRUE),
+    standard_deviation = sd(mean_earnings, na.rm = TRUE),
+    interquartile_range = IQR(mean_earnings, na.rm = TRUE)
+    ) 
+```
+
+
+## Data Analysis
+
+* Null hypothesis: _Mean earnings of graduates from schools in Cities are not significantly higher than mean earnings of students graduating from schools in Rural Areas_.
+
+* Alternative hypothesis: _Mean earnings of graduates from schools in Cities are significantly higher than mean earnings of students graduating from schools in Rural Areas_. 
+
+* I am going to perform an one-sided test because I would like to explore whether it is true or not that companies often prioritize or recruit students graduating from local schools. This would be reflected in their earnings, as employees in companies based in cities often have higher income, since the living expenses are much higher. Hence, if mean earnings of graduates from schools in Cities are significantly higher, it means that most of those students continue to work in cities after graduating, and most students graduating from rural schools continue to stay in rural areas after graduation. Therefore, I am going to analyze only one side, which is whether or not mean earnings of graduates from schools in Cities are significantly higher. Even if I use a two-sided test to include the opposite side, which is the situation where mean earnings of students graduating from schools in rural areas are significantly higher, it would be redundant because even when it is true, it would not help prove whether or not companies prioritize local students- my main research topic.  
+ 
+* The proper test statistic is “diff in means”.
+
+```{r}
+college_locale <- college_reduced %>%
+mutate(
+  location = if_else(
+    recoded_LOCALE == "large_city" | 
+      recoded_LOCALE == "midsize_city" | 
+      recoded_LOCALE == "small_city" ,
+    "city",
+    "rural"
+  ) 
+)
+```
+
+* I just mutated and combined all city-related locations and rural locations into two new catergories _city_ and _rural_ for the upcoming null hypothesis test.
+
+```{r}
+college_null <- college_locale %>%
+  specify(mean_earnings ~ location) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 10000, type = "permute") %>%
+  calculate(stat = "diff in means", order = c("city", "rural"))
+```
+
+* In this part, I calculated the observed test statistic and created a null distribution by running 10,000 permutations of the original data. I used "independence" for null because my explanatory and response variables both refer to columns in the dataset. "permute" was used to run the simulation by randomly shuffling the order of the cells in the explanatory and response variables. I used "diff in means" to calculate the mean of the numerical response variable (mean_earnings) for the two groups defined in the categorical explanatory variable (location). 
+
+```{r}
+college_obs_stat <- college_locale %>%
+  specify(mean_earnings ~ location) %>%
+  calculate(stat = "diff in means", order = c("city", "rural"))
+```
+
+```{r}
+college_null %>%
+  get_p_value(obs_stat = college_obs_stat, direction = "right")
+```
+
+* I just calculated the p-value using the one-sided hypothesis. I used "right" for the direction because I wanted to calculate my test statistics as __city - rural__, as in the previously written code.  
+
+```{r}
+college_null %>%
+  visualize() +
+  shade_p_value(obs_stat = college_obs_stat, direction = "right")
+```
+
+* Since the computed p-value is 0, which is less than 0.05, our significance level, we reject the null hypothesis in favor of the alternative hypothesis. Based on this analysis, mean earnings of graduates from schools in Cities __are significantly higher__ than mean earnings of students graduating from schools in Rural Areas. In other words, it is true that companies often recruit students more from local schools. 
+
+## Conclusion
+
+As we sum up, the analyses from these different sections supported each other. In the Visualization Section, I could already see that the mean earnings of students graduating from college in cities are higher and their distributions spread more on higher values of the x-axis (mean_earnings). Also, the distributions of mean earnings in rural areas are symmetric, while the distributions of mean earnings of students graduating from schools in cities are right-skewed. Adding on to that, the modes of the distributions of rural areas seem to have sharp peaks, while the modes of the distributions of cities tend to have flat peaks. 
+
+
+In the Summary Statistics Section, it can be seen that the statistics of city areas are higher than those of rural areas in general. More importantly, for most of the summarized statistics, the values of each category found seem to follow the following pattern: **large_city** > **midsize_city** > **small_city** > **fringe_rural** > **distant_rural** > **remote_rural**. This is a really important pattern, since it shows that the mean earnings of students are not only higher in cities than in rural areas, but they are also decreasing as the size of the city decreasing or the rural area located further from the center. Please note that the variable "recoded_LOCALE" represents the locations of the schools, and the variable "mean_earnings" represents the earnings of __students graduating from schools in those locations__, __not__ the mean_earnings of __people living in those locations in general__. Combining all these information together, it clearly proves that students tend to work in the same place where their schools are located, which means companies tend to recruit students graduating from local schools. If the majority of the students choose to work in another place, or if companies do not recruit students more from local schools but only from top universities of the countries, then the statistics would be mixed up rather than following the pattern that I mentioned above. 
+
+Finally, based on the Data Analysis Section where the p-value equals 0 was found, the null hypothesis was rejected and it was proven that the mean earnings of students graduating from schools in big cities are significant higher than mean earnings of graduates from schools in rural areas. I think this finding would be beneficial for the society in general and for high school students who are trying to find a suitable college. Now they can add school's location into their bucket list when picking colleges if they also want to consider job-hunting after graduation when applying to colleges. When I proposed this question in the group chat, it was disagreed by another teammate as he thinks companies would only consider school's reputation, not school's location. However, based on this analysis, I believe that there is a relationship school's location and students' work choice or earnings. 
